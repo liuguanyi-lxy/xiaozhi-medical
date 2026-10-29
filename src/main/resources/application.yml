@@ -1,0 +1,83 @@
+# web服务访问端口
+server:
+  port: 8081
+
+# ============================================================
+# 敏感配置统一使用环境变量占位，禁止把真实密钥提交到代码仓库。
+# 本地开发请在 IDE / 系统环境变量中配置，或使用 .env（已加入 .gitignore）：
+#   DEEPSEEK_API_KEY、DASHSCOPE_API_KEY、PINECONE_API_KEY、
+#   MYSQL_HOST、MYSQL_PORT、MYSQL_USERNAME、MYSQL_PASSWORD
+# 生产环境建议全部托管到 Nacos 配置中心，并开启配置加密。
+# ============================================================
+
+# langchain4j测试模型
+langchain4j:
+  open-ai:
+    chat-model:
+      # DeepSeek
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+
+      # DeepSeek-V3
+      model-name: deepseek-chat
+
+      # DeepSeek-R1 推理模型
+      #model-name: deepseek-reasoner
+
+      # 请求和响应日志
+      log-requests: true
+      log-responses: true
+  #阿里百炼平台
+  community:
+    dashscope:
+      chat-model:
+        api-key: ${DASHSCOPE_API_KEY:}
+        model-name: qwen-max
+      image-model:
+        api-key: ${DASHSCOPE_API_KEY:}
+        model-name: wanx2.1-t2i-plus
+      embedding-model:
+        api-key: ${DASHSCOPE_API_KEY:}
+        model-name: text-embedding-v2
+      #集成阿里通义千问-流式输出
+      streaming-chat-model:
+        api-key: ${DASHSCOPE_API_KEY:}
+        model-name: qwen-plus
+
+# Pinecone 向量库配置
+pinecone:
+  api-key: ${PINECONE_API_KEY:}
+  index: xiaozhiyiliao
+  namespace: xiaozhiyiliao
+  region: us-east-1
+
+# RAG 知识库配置
+rag:
+  # 知识库文档位置（classpath 内置，换知识库只需替换文档或改此配置）
+  knowledge-location: classpath:knowledge/*.md
+
+# 医院模拟系统接口地址（查询号源等工具远程调用）
+hospital:
+  api:
+    base-url: ${HOSPITAL_API_BASE_URL:http://localhost:8201}
+
+#MongoDB连接配置
+spring:
+  data:
+    mongodb:
+      uri: mongodb://${MONGODB_HOST:127.0.0.1}:${MONGODB_PORT:27017}/chat_memory_db
+# 基本数据源配置
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/guiguxiaozhi?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+# 启用日志debug级别
+logging:
+  level:
+    root: info
