@@ -1,0 +1,37 @@
+<!--
+  v2-preview.html — ChatWindow.v2.vue 的本地预览入口
+
+  用途：不依赖后端，直接看 v2 界面的真实样子。
+  原理：在 v2-preview.js 里把 axios 的请求换成本地假数据，
+        组件代码零改动，流式打字效果照样有。
+
+  ⚠️ 这是预览辅助文件，不属于产品代码。
+     正式运行时 App.vue 用的是 src/components/ChatWindow.vue，
+     要看正式版请 npm run dev 后访问根路径。
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小智医疗 · v2 预览</title>
+</head>
+<body style="margin:0">
+  <div id="app"></div>
+  <!-- 预览标识：防止与真实运行界面混淆 -->
+  <div id="preview-flag" style="
+    position:fixed; top:12px; right:12px; z-index:99999;
+    display:flex; align-items:center; gap:8px;
+    padding:8px 14px; border-radius:999px;
+    background:#b11226; color:#fff;
+    font:500 13px/1.2 'Noto Sans SC', system-ui, sans-serif;
+    box-shadow:0 4px 16px rgba(0,0,0,.18);
+    pointer-events:none;
+  ">
+    <span style="width:7px;height:7px;border-radius:50%;background:#fff;"></span>
+    预览模式 · 回答由本地假数据生成，未连接后端
+  </div>
+
+  <script type="module" src="/src/v2-preview.js"></script>
+</body>
+</html>

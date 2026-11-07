@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景圆形 -->
+  <circle cx="256" cy="256" r="240" fill="#4A90E2"/>
+  
+  <!-- 医疗十字 -->
+  <rect x="226" y="156" width="60" height="200" rx="10" fill="white"/>
+  <rect x="156" y="226" width="200" height="60" rx="10" fill="white"/>
+  
+  <!-- AI芯片电路图案 -->
+  <rect x="206" y="206" width="100" height="100" rx="15" fill="#4A90E2" stroke="white" stroke-width="4"/>
+  
+  <!-- 电路线条 -->
+  <line x1="206" y1="236" x2="176" y2="236" stroke="white" stroke-width="3"/>
+  <line x1="306" y1="236" x2="336" y2="236" stroke="white" stroke-width="3"/>
+  <line x1="236" y1="206" x2="236" y2="176" stroke="white" stroke-width="3"/>
+  <line x1="236" y1="306" x2="236" y2="336" stroke="white" stroke-width="3"/>
+  
+  <!-- 电路节点 -->
+  <circle cx="176" cy="236" r="6" fill="white"/>
+  <circle cx="336" cy="236" r="6" fill="white"/>
+  <circle cx="236" cy="176" r="6" fill="white"/>
+  <circle cx="236" cy="336" r="6" fill="white"/>
+  
+  <!-- 机器人眼睛 -->
+  <circle cx="236" cy="240" r="8" fill="white"/>
+  <circle cx="276" cy="240" r="8" fill="white"/>
+</svg>
