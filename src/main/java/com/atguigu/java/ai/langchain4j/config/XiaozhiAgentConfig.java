@@ -25,11 +25,13 @@ import java.util.List;
 /**
  * 小智智能助手配置类
  *
- * 该配置类用于配置小智助手的聊天记忆提供者，使用MongoDB持久化存储对话历史，
- * 支持基于窗口的消息管理策略。
+ * 说明：会话记忆持久化在 MongoDB（chat_memory_db 库），
+ * 按 memoryId 隔离，应用重启后历史上下文仍可恢复。
  */
 @Configuration
 public class XiaozhiAgentConfig {
+
+    /** 会话记忆持久化到 MongoDB（chat_memory_db），重启后仍可恢复上下文 */
     @Autowired
     private MongoChatMemoryStore mongoChatMemoryStore;
 
@@ -80,7 +82,7 @@ public class XiaozhiAgentConfig {
      * @return ContentRetriever 内容检索器实例，用于从向量数据库中检索相关知识
      */
     @Bean
-    public ContentRetriever contentRetrieverXiaozhiPinecone() {
+    public ContentRetriever contentRetrieverXiaozhiMilvus() {
         List<Document> documents = loadKnowledgeDocuments();
 
         // 知识库幂等入库：重启不重复灌入，文档变更自动替换旧向量

@@ -106,30 +106,26 @@ public class AppointmentTools {
      * @param doctorName 医生名称，可选参数
      * @return 是否有可用号源，true表示有号源，false表示无号源
      */
-    @Tool(name = "查询是否有号源", value="根据科室名称，日期，时间和医生查询是否有号源，并返回给用户")
-    public boolean querySchedule(
+    @Tool(name = "查询号源", value = "根据科室名称、日期、时段和医生查询号源。"
+            + "返回值里包含该时段真实出诊医生的姓名、职称和剩余号数。"
+            + "回答用户时，医生姓名、职称、时间、剩余号数只能照抄这里的返回值，不得自行补充或替换。")
+    public String querySchedule(
             @P(value = "科室名称") String name,//此注解是给大模型标注该参数对应的描述,从用户的输入中获取
             @P(value = "日期") String date,
             @P(value = "时间，可选值：上午、下午") String time,
             @P(value = "医生名称", required = false) String doctorName
     ) {
-        log.info("查询是否有号源：科室={}，日期={}，时间={}，医生={}", name, date, time, doctorName);
-
-        /**
-         * TODO 维护医生的排班信息：
-         * 1. 如果没有指定医生名字，则根据其他条件查询是否有可以预约的医生（有返回true，否则返回false）
-         * 2. 如果指定了医生名字，则判断医生是否有排班（没有排班返回false）
-         * 3. 如果有排班，则判断医生排班时间段是否已约满（约满返回false，有空闲时间返回true）
-         */
+        log.info("查询号源：科室={}，日期={}，时间={}，医生={}", name, date, time, doctorName);
 
         String host = hospitalApiBaseUrl;
-        String path = "/api/hosp/selectSchedule";
+        // 平台侧映射：HospitalApiController 类级 @RequestMapping("/api/hosp/hospital")
+        // + 方法级 @PostMapping("selectSchedule")
+        // => 真实路径必须是 /api/hosp/hospital/selectSchedule。
+        String path = "/api/hosp/hospital/selectSchedule";
         String method = "POST";
-        //远程调用接口所需要的参数
         Map<String, String> headers = new HashMap<String, String>();
         Map<String, String> querys = new HashMap<String, String>();
         Map<String, String> bodys = new HashMap<String, String>();
-        //请求体中封装了查询参数
         bodys.put("name", name);
         if (doctorName != null && !doctorName.isBlank()) {
             bodys.put("doctorName", doctorName);
@@ -140,38 +136,46 @@ public class AppointmentTools {
         try {
             CloseableHttpResponse response = HttpUtils.doPost(host, path, method, headers, querys, bodys);
             HttpEntity entity = response.getEntity();
-            String result = EntityUtils.toString(entity,"UTF-8");
+            String result = EntityUtils.toString(entity, "UTF-8");
             JSONObject jsonObject = JSONObject.parseObject(result);
             Integer code = jsonObject.getInteger("code");
             if (code == null || code != 200) {
-                return false;
+                return "号源查询服务返回异常（code=" + code + "），我无法确认该时段是否有号";
             }
-            // 平台 selectSchedule 返回 { code, message, data:[ {availableNumber, status, ...} ] }
-            // 只有确实存在"状态可用且剩余号源大于 0"的排班，才算有号源；
-            // 不能再把"接口调用成功"当成"有号"。
+
             JSONArray scheduleList = jsonObject.getJSONArray("data");
             if (scheduleList == null || scheduleList.isEmpty()) {
-                return false;
+                return "该时段查无排班，即没有可预约的号源";
             }
+
+            // 只收集"状态可用且剩余号源大于 0"的排班，并把真实医生信息原样带回给模型，
+            // 避免模型只知道"有号"却不知道是谁出诊，从而自行编造医生姓名。
+            StringBuilder available = new StringBuilder();
             for (int i = 0; i < scheduleList.size(); i++) {
                 JSONObject schedule = scheduleList.getJSONObject(i);
                 Integer availableNumber = schedule.getInteger("availableNumber");
                 Integer status = schedule.getInteger("status");
                 if (availableNumber != null && availableNumber > 0
                         && (status == null || status == 1)) {
-                    return true;
+                    if (available.length() > 0) {
+                        available.append("；");
+                    }
+                    available.append(String.format("%s（%s），剩余 %d 个号",
+                            schedule.getString("docname"),
+                            schedule.getString("title"),
+                            availableNumber));
                 }
             }
-            return false;
+
+            if (available.length() == 0) {
+                return "该时段有排班，但号源已约满，没有可用号";
+            }
+            return "有可用号源：" + available
+                    + "。以上医生与号数来自医院排班系统，请原样转述给用户。";
+
         } catch (Exception e) {
-            /**
-             * 当远程服务不可用时，记录错误并返回false
-             */
             log.error("查询号源接口调用失败，host={}", host, e);
+            return "号源查询服务不可用，我无法确认该时段是否有号，请稍后再试或直接联系医院";
         }
-        /**
-         * 服务不可用时默认返回false，表示无法确认是否有号源
-         */
-        return false;
     }
 }

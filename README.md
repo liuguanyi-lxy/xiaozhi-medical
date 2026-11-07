@@ -6,8 +6,10 @@
 
 | 能力 | 实现方式 |
 |---|---|
-| **RAG 检索增强** | 医院/科室/神经内科知识文档向量化后存入 Pinecone，对话时按语义检索相关片段注入上下文，规避大模型幻觉 |
-| **Function Calling** | `AppointmentTools` 暴露号源查询、预约挂号等工具方法，由模型自主判断何时调用 |
+| **RAG 检索增强** | 医院/科室/神经内科知识文档向量化后存入本地 Milvus，对话时按语义检索相关片段注入上下文，规避大模型幻觉 |
+| **号源真实校验** | 工具调用医院平台排班接口，按 `availableNumber > 0 && status == 1` 判定可用号源，并把真实出诊医生、职称、剩余号数带回给模型，杜绝编造 |
+| **Function Calling** | `AppointmentTools` 暴露号源查询、预约挂号、取消预约等工具方法，由模型自主判断何时调用 |
+| **幂等知识入库** | 文档内容 SHA-256 指纹 + 向量 id 登记：重启不重复灌库，文档变更时先删旧向量再写入，杜绝新旧版本并存 |
 | **多轮会话记忆** | 按 `memoryId` 隔离会话，记忆持久化到 MongoDB（重启不丢失），而非进程内存 |
 | **流式输出** | 基于 WebFlux + Reactor `Flux` 逐字返回，前端可边生成边渲染 |
 | **双模型接入** | DeepSeek（OpenAI 兼容协议）负责通用对话，通义千问 `qwen-plus` 负责流式问诊 |
@@ -20,7 +22,7 @@
 | AI 框架 | **LangChain4j 1.4.0-beta10** |
 | 大模型 | DeepSeek（`deepseek-chat`）· 通义千问 `qwen-max` / `qwen-plus`（流式） |
 | 向量化 | 阿里百炼 `text-embedding-v2` |
-| 向量库 | **Pinecone**（云托管，index `xiaozhiyiliao`） |
+| 向量库 | **Milvus**（本地虚拟机部署，collection `xiaozhi_knowledge`，COSINE 相似度） |
 | 会话记忆 | MongoDB（`chat_memory_db`） |
 | 业务数据 | MySQL 8.0 · MyBatis-Plus（预约挂号） |
 | API 文档 | Knife4j（OpenAPI 3） |
@@ -37,7 +39,7 @@ POST /xiaozhi/chat ──▶ XiaozhiController
                     XiaozhiAgent（@AiService）
                     ├── SystemMessage：xiaozhi-prompt-template.txt 定义人设与边界
                     ├── ChatMemory：按 memoryId 从 MongoDB 读取历史
-                    ├── ContentRetriever：向量检索 Pinecone → 注入相关知识
+                    ├── ContentRetriever：向量检索 Milvus → 注入相关知识
                     ├── Tools：模型判断是否需要查号源 / 下单预约
                     └── StreamingChatModel：qwen-plus 流式生成
                           │
@@ -47,17 +49,19 @@ POST /xiaozhi/chat ──▶ XiaozhiController
 
 ## 关键设计
 
-### 1. RAG 知识库构建
+### 1. RAG 知识库幂等入库
 
-- `KnowledgeBaseIngestor` 扫描 `classpath:knowledge/*.md`，切分后调用 `text-embedding-v2` 向量化，写入 Pinecone 指定 namespace
-- 换知识库只需替换文档或改 `rag.knowledge-location` 配置，不用改代码
-- 检索结果作为上下文拼进 prompt，让模型基于真实医院信息回答而非编造
+- `KnowledgeBaseIngestor` 扫描 `classpath:knowledge/*.md`，递归切分（约 300 token/段，重叠 30）后调用 `text-embedding-v2` 向量化，写入 Milvus 指定 collection
+- **幂等策略**：入库前对文档内容计算 SHA-256 指纹，与本地登记文件（`~/.xiaozhi/knowledge-index.json`）中的一致则跳过；文档变更时先按登记的向量 id 删除旧向量、再全量写入新向量，向量 id 在切分时显式生成并登记
+- 效果：重启不重复灌库、文档更新不留过期向量；换知识库只需替换文档或改 `rag.knowledge-location` 配置，不用改代码
+- 为什么用内容哈希不用文件修改时间：mtime 在机器间克隆/同步后不可靠，内容哈希才是"内容没变"的依据
 
-### 2. Function Calling 打通业务系统
+### 2. Function Calling 打通业务系统，号源真实校验
 
 - `AppointmentTools` 声明工具方法，LangChain4j 自动生成 function schema 交给模型
-- 模型根据用户意图自主决定是否调用（例如用户说"帮我挂神经内科周三的号"）
-- 工具内部通过 `HttpUtils` 调用医院号源系统（`hospital.api.base-url`），拿到真实号源
+- **号源查询不走"接口通了就有号"的捷径**：调用医院平台 `/api/hosp/hospital/selectSchedule`，解析排班列表，只保留 `availableNumber > 0 && status == 1` 的排班，并把真实医生姓名、职称、剩余号数原样带回给模型——模型只知道系统返回的事实，无从编造
+- 接口异常与"无排班""已约满"分别返回明确的降级话术，把"查不到"和"没号"区分开，避免误导用户
+- 预约落库前做防幻觉处理：模型可能塞入的 id 强制置空由数据库自增，落库前按业务字段再查一次防重复
 
 ### 3. 会话记忆持久化
 
@@ -73,7 +77,7 @@ POST /xiaozhi/chat ──▶ XiaozhiController
     streamingChatModel = "qwenStreamingChatModel",
     chatMemoryProvider = "chatMemoryProviderXiaozhi",
     tools = "appointmentTools",
-    contentRetriever = "contentRetrieverXiaozhiPinecone"
+    contentRetriever = "contentRetrieverXiaozhiMilvus"
 )
 public interface XiaozhiAgent {
     @SystemMessage(fromResource = "xiaozhi-prompt-template.txt")
@@ -92,7 +96,11 @@ public interface XiaozhiAgent {
 ```bash
 DEEPSEEK_API_KEY=        # DeepSeek 密钥
 DASHSCOPE_API_KEY=       # 阿里百炼密钥（对话 / 向量 / 图像共用）
-PINECONE_API_KEY=        # Pinecone 密钥
+MILVUS_HOST=192.168.13.100   # Milvus 地址（默认本地虚拟机）
+MILVUS_PORT=19530
+MILVUS_COLLECTION=xiaozhi_knowledge
+MILVUS_USERNAME=         # 未开启鉴权留空
+MILVUS_PASSWORD=
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_USERNAME=root
@@ -108,7 +116,7 @@ HOSPITAL_API_BASE_URL=http://localhost:8201
 |---|---|---|
 | MySQL | 预约挂号数据 | 3306 |
 | MongoDB | 对话记忆 | 27017 |
-| Pinecone | 向量检索 | 云服务 |
+| Milvus | 向量检索（本地虚拟机） | 19530 |
 | 医院号源系统 | 号源查询 / 预约 | 8201 |
 
 ### 3. 启动
@@ -136,15 +144,15 @@ src/main/java/com/atguigu/java/ai/langchain4j
 │   └── Assistant.java
 ├── config
 │   ├── XiaozhiAgentConfig.java  # 流式模型、记忆提供者、检索器装配
-│   ├── EmbeddingStoreConfig.java# Pinecone 向量库配置
+│   ├── EmbeddingStoreConfig.java# Milvus 向量库配置
 │   └── MongoConfig.java
 ├── controller                   # /xiaozhi/chat 流式接口
 ├── store
-│   ├── KnowledgeBaseIngestor.java  # 知识文档向量化入库
+│   ├── KnowledgeBaseIngestor.java  # 知识文档幂等入库（SHA-256 指纹 + 向量 id 登记）
 │   ├── KnowledgeFileRecord.java
 │   └── MongoChatMemoryStore.java   # MongoDB 会话记忆
 ├── tools
-│   └── AppointmentTools.java    # Function Calling 工具
+│   └── AppointmentTools.java    # Function Calling 工具（号源真实校验）
 ├── service / mapper / entity    # 预约挂号业务（MySQL）
 └── utils / bean                 # 工具类与请求响应体
 ```

@@ -3,8 +3,8 @@ package com.atguigu.java.ai.langchain4j.config;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.pinecone.PineconeEmbeddingStore;
-import dev.langchain4j.store.embedding.pinecone.PineconeServerlessIndexConfig;
+import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
+import io.milvus.param.MetricType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -12,10 +12,13 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * 嵌入存储配置类
- * 用于配置和创建基于 Pinecone 的向量嵌入存储，支持文本片段的存储和检索
  *
- * 说明：API Key 等敏感信息一律通过配置项注入，不硬编码在源码中，
- * 配置值从环境变量 / Nacos 配置中心读取，源码仓库中仅保留占位符。
+ * 向量库从云端的 Pinecone 换成部署在本地虚拟机上的 Milvus：
+ *   · 数据留在自己机器上，不出网
+ *   · 不需要第三方 API Key，也不受额度与网络波动影响
+ *   · 检索走内网，延迟更稳
+ *
+ * 连接参数全部来自配置项，不硬编码在源码中。
  */
 @Configuration
 public class EmbeddingStoreConfig {
@@ -23,42 +26,51 @@ public class EmbeddingStoreConfig {
     @Autowired
     private EmbeddingModel embeddingModel;
 
-    /** Pinecone API Key，通过环境变量 PINECONE_API_KEY 注入 */
-    @Value("${pinecone.api-key}")
-    private String pineconeApiKey;
+    /** Milvus 主机（本地虚拟机） */
+    @Value("${milvus.host:192.168.13.100}")
+    private String milvusHost;
 
-    /** Pinecone 索引名称 */
-    @Value("${pinecone.index:xiaozhiyiliao}")
-    private String pineconeIndex;
+    /** Milvus gRPC 端口 */
+    @Value("${milvus.port:19530}")
+    private Integer milvusPort;
 
-    /** Pinecone 命名空间 */
-    @Value("${pinecone.namespace:xiaozhiyiliao}")
-    private String pineconeNamespace;
+    /** 存放知识库向量的集合名 */
+    @Value("${milvus.collection:xiaozhi_knowledge}")
+    private String collectionName;
 
-    /** Pinecone 部署区域 */
-    @Value("${pinecone.region:us-east-1}")
-    private String pineconeRegion;
+    /** Milvus 用户名，未开启鉴权时留空 */
+    @Value("${milvus.username:}")
+    private String milvusUsername;
+
+    /** Milvus 密码，未开启鉴权时留空 */
+    @Value("${milvus.password:}")
+    private String milvusPassword;
 
     /**
-     * 创建并配置 Pinecone 嵌入存储 Bean
-     * 该存储用于保存和检索文本片段的向量表示，支持语义搜索功能
+     * 创建并配置 Milvus 嵌入存储 Bean
      *
-     * @return 配置好的 EmbeddingStore 实例，用于管理 TextSegment 的向量存储
+     * 维度取自当前注入的 EmbeddingModel（DashScope text-embedding-v2 为 1536），
+     * 换嵌入模型时不需要手工改维度，避免维度不匹配导致检索失败。
+     *
+     * @return 用于存取文本片段向量的 EmbeddingStore 实例
      */
     @Bean
     public EmbeddingStore<TextSegment> embeddingStore() {
-        // 创建 Pinecone 嵌入存储实例，配置连接参数和索引设置
-        EmbeddingStore<TextSegment> embeddingStore = PineconeEmbeddingStore.builder()
-                .apiKey(pineconeApiKey)
-                .index(pineconeIndex)
-                .nameSpace(pineconeNamespace)
-                .createIndex(
-                        PineconeServerlessIndexConfig.builder()
-                        .cloud("AWS")
-                        .region(pineconeRegion)
-                        .dimension(embeddingModel.dimension())
-                        .build())
-                .build();
-        return embeddingStore;
+        MilvusEmbeddingStore.Builder builder = MilvusEmbeddingStore.builder()
+                .host(milvusHost)
+                .port(milvusPort)
+                .collectionName(collectionName)
+                // 维度跟随嵌入模型，避免手写 1536 与实际模型不一致
+                .dimension(embeddingModel.dimension())
+                .metricType(MetricType.COSINE)
+                // 写入后立即 flush，保证刚灌完库就能检索到
+                .autoFlushOnInsert(true);
+
+        // 只有配置了用户名才走鉴权，避免空用户名被服务端拒绝
+        if (milvusUsername != null && !milvusUsername.isBlank()) {
+            builder.username(milvusUsername).password(milvusPassword);
+        }
+
+        return builder.build();
     }
 }

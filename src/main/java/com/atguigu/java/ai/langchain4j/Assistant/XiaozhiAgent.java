@@ -19,7 +19,7 @@ import static dev.langchain4j.service.spring.AiServiceWiringMode.EXPLICIT;
         streamingChatModel = "qwenStreamingChatModel",
         chatMemoryProvider = "chatMemoryProviderXiaozhi",
         tools = "appointmentTools",//tools配置,给小智添加工具方法，在一定的场景下调用
-        contentRetriever = "contentRetrieverXiaozhiPinecone"//【修复】原拼写 Pincone 与 Bean 名不一致，
+        contentRetriever = "contentRetrieverXiaozhiMilvus"//【修复】原拼写 Pincone 与 Bean 名不一致，
         //EXPLICIT 模式按 Bean 名解析（无类型回退），启动会抛 NoSuchBeanDefinitionException
 )
 public interface XiaozhiAgent {

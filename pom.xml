@@ -96,10 +96,11 @@
             <artifactId>fastjson</artifactId>
             <version>2.0.16</version>
         </dependency>
-        <!--导入Pinecone向量数据库-->
+        <!--向量数据库：本地 Milvus（取代云端 Pinecone，数据不出本地）-->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-pinecone</artifactId>
+            <artifactId>langchain4j-milvus</artifactId>
+            <version>1.4.0-beta10</version>
         </dependency>
         <!--流式输出-->
         <dependency>

@@ -5,8 +5,10 @@ server:
 # ============================================================
 # 敏感配置统一使用环境变量占位，禁止把真实密钥提交到代码仓库。
 # 本地开发请在 IDE / 系统环境变量中配置，或使用 .env（已加入 .gitignore）：
-#   DEEPSEEK_API_KEY、DASHSCOPE_API_KEY、PINECONE_API_KEY、
-#   MYSQL_HOST、MYSQL_PORT、MYSQL_USERNAME、MYSQL_PASSWORD
+#   DEEPSEEK_API_KEY、DASHSCOPE_API_KEY、
+#   MILVUS_HOST、MILVUS_PORT、MILVUS_COLLECTION、MILVUS_USERNAME、MILVUS_PASSWORD、
+#   MYSQL_HOST、MYSQL_PORT、MYSQL_USERNAME、MYSQL_PASSWORD、
+#   MONGODB_HOST、MONGODB_PORT、HOSPITAL_API_BASE_URL
 # 生产环境建议全部托管到 Nacos 配置中心，并开启配置加密。
 # ============================================================
 
@@ -44,12 +46,14 @@ langchain4j:
         api-key: ${DASHSCOPE_API_KEY:}
         model-name: qwen-plus
 
-# Pinecone 向量库配置
-pinecone:
-  api-key: ${PINECONE_API_KEY:}
-  index: xiaozhiyiliao
-  namespace: xiaozhiyiliao
-  region: us-east-1
+# Milvus 向量库配置（本地虚拟机，取代原 Pinecone 云端）
+# 数据留在自己机器上，不需要 API Key，也不受网络和额度影响
+milvus:
+  host: ${MILVUS_HOST:192.168.13.100}
+  port: ${MILVUS_PORT:19530}
+  collection: ${MILVUS_COLLECTION:xiaozhi_knowledge}
+  username: ${MILVUS_USERNAME:}
+  password: ${MILVUS_PASSWORD:}
 
 # RAG 知识库配置
 rag:
@@ -59,13 +63,13 @@ rag:
 # 医院模拟系统接口地址（查询号源等工具远程调用）
 hospital:
   api:
-    base-url: ${HOSPITAL_API_BASE_URL:http://localhost:8201}
+    base-url: ${HOSPITAL_API_BASE_URL:http://localhost:8201}  # 号源服务 service_hosp
 
 #MongoDB连接配置
 spring:
   data:
     mongodb:
-      uri: mongodb://${MONGODB_HOST:127.0.0.1}:${MONGODB_PORT:27017}/chat_memory_db
+      uri: mongodb://${MONGODB_HOST:192.168.13.100}:${MONGODB_PORT:27017}/chat_memory_db
 # 基本数据源配置
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/guiguxiaozhi?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
